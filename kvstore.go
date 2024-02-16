@@ -6,8 +6,11 @@ import (
 )
 
 var storefile = "global.db"
-
 var store = map[string]string{}
+
+func init() {
+    readdb()
+}
 
 func readdb() error {
 	f, err := os.OpenFile(storefile, os.O_RDONLY|os.O_CREATE, 0700)
@@ -43,12 +46,10 @@ func writedb() error {
 }
 
 func Retrieve(key string) string {
-	readdb()
 	return store[key]
 }
 
 func Store(key, value string) {
-	readdb()
 	store[key] = value
 	err := writedb()
 	if err != nil {
@@ -58,6 +59,5 @@ func Store(key, value string) {
 }
 
 func Dump() map[string]string {
-	readdb()
 	return store
 }

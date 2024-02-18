@@ -18,3 +18,8 @@
   ...
 
 - Add resource version i.e an integer counter that represents the current version of the key
+
+```
+$ make clean
+$ make
+```

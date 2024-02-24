@@ -5,28 +5,41 @@ import (
 	"os"
 )
 
-var storefile = "global.db"
-
-type kv struct {
-	key      string
-	value    string
-	revision int
+type KeyValue struct {
+	Key      string
+	Value    string
+	Revision int
 }
 
-type store []kv
+type Store struct {
+	File string
+	Data []KeyValue
+}
 
-func Open() store {
-	s := make(store, 0)
+func OpenDefault() (Store, error) {
+	var sf = "global.db"
+	return Open(sf)
+}
+
+func Open(file string) (Store, error) {
+	pairs := make([]KeyValue, 0)
+	s := Store {
+		File: file,
+		Data: pairs,
+	}
 	// TODO: Unless it's permission denied accessing/creating
 	// is it safe to ignore the error?
-	s, _ = s.readdb()
-	return s
+	s, err := s.readdb()
+	if err != nil {
+		return s, err
+	}
+	return s, nil
 }
 
-func (s store) readdb() (store, error) {
-	f, err := os.OpenFile(storefile, os.O_RDONLY|os.O_CREATE, 0700)
+func (s Store) readdb() (Store, error) {
+	f, err := os.OpenFile(s.File, os.O_RDONLY|os.O_CREATE, 0700)
 	if err != nil {
-		return nil, err
+		return Store{}, err
 	}
 	defer f.Close()
 
@@ -38,68 +51,92 @@ func (s store) readdb() (store, error) {
 			break
 		}
 
-		pair := kv{
-			key:      key,
-			value:    value,
-			revision: revision,
+		pair := KeyValue{
+			Key:      key,
+			Value:    value,
+			Revision: revision,
 		}
-		s = append(s, pair)
+		s.Data = append(s.Data, pair)
 	}
 	return s, nil
 }
 
-func (s store) writedb() error {
-	f, err := os.OpenFile(storefile, os.O_WRONLY|os.O_CREATE, 0700)
+func (s Store) writedb() error {
+	f, err := os.OpenFile(s.File, os.O_WRONLY|os.O_CREATE, 0700)
 	if err != nil {
 		return err
 	}
 	defer f.Close()
 
 	var buf string
-	for _, pair := range s {
-		buf += fmt.Sprintf("%v\n%v\n%v\n", pair.key, pair.value, pair.revision)
+	for _, pair := range s.Data {
+		buf += fmt.Sprintf("%v\n%v\n%v\n", pair.Key, pair.Value, pair.Revision)
 	}
 	f.Write([]byte(buf))
 	return nil
 }
 
-func (s store) Retrieve(key string) string {
-	i, err := s.findKV(key)
+func (s Store) Retrieve(key string) string {
+	i, err := s.FindKV(key)
 	if err != nil {
 		return ""
 	}
-	return s[i].value
+	return s.Data[i].Value
 }
 
-func (s store) findKV(key string) (int, error) {
-	for i, r := range s {
-		if r.key == key {
+func (s Store) FindKV(key string) (int, error) {
+	for i, r := range s.Data {
+		if r.Key == key {
 			return i, nil
 		}
 	}
 	return -1, fmt.Errorf("not found")
 }
 
-func (s store) Store(key, value string) {
-	if i, err := s.findKV(key); err != nil {
-		s = append(s, kv{
-			key:   key,
-			value: value,
+func (s Store) Store(key, value string) (Store, error) {
+	if i, err := s.FindKV(key); err != nil {
+		s.Data = append(s.Data, KeyValue{
+			Key:   key,
+			Value: value,
 		})
 	} else {
-		s[i] = kv{
-			key:      key,
-			value:    value,
-			revision: s[i].revision + 1,
+		s.Data[i] = KeyValue{
+			Key:      key,
+			Value:    value,
+			Revision: s.Data[i].Revision + 1,
 		}
 	}
 	err := s.writedb()
 	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
+		return s, err
 	}
+	return s, nil
 }
 
-func (s store) Dump() store {
+func (s Store) Dump() Store {
 	return s
+}
+
+func (s Store) RunCmd() error {
+	if len(os.Args) < 2 {
+		fmt.Println(s.Dump())
+		return nil
+	}
+	key := os.Args[1]
+	
+	var value string
+	if len(os.Args) >= 3 {
+		value = os.Args[2]
+		fmt.Println(value)
+		_, err := s.Store(key, value)
+		if err != nil {
+			return err
+		}
+		return nil
+	}
+
+	if value = s.Retrieve(key); value != "" {
+		fmt.Println(value)		
+	}
+	return nil
 }
